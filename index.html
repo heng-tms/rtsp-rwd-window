@@ -1,57 +1,48 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>即時監控畫面</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title></title>
   <style>
-    /* 關鍵：完全消除捲軸、填滿整個視窗 */
-    html, body {
-      height: 100%;
-      width: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #000;
-    }
-    /* 讓 video 標籤 100% 撐滿，並保持比例 */
-    video {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: contain;   /* 畫面完整顯示不會被裁切 */
-      /* object-fit: cover;   如果你想裁切成滿版可換這行 */
-    }
+    html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:#000}
+    video{position:absolute;top:0;left:0;width:100%!important;height:100%!important;object-fit:contain}
   </style>
 </head>
 <body>
-  <!-- 直接用原生 video 標籤 + hls.js -->
   <video id="video" controls autoplay muted playsinline></video>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
     const video = document.getElementById('video');
-    const hlsUrl = 'https://60.251.39.37:8088/videostreams/1/stream';  // 你的串流
-
-    // 讓 Tableau 內也能自動播放（加了 muted）
-    video.muted = true;
-    video.playsInline = true;
+    
+    // 重點 1：改用 http（避開 mixed content + 自簽憑證問題）
+    const hlsUrl = 'http://60.251.39.37:8088/videostreams/1/stream';
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        enableWorker: true,
         lowLatencyMode: true,
-        backBufferLength: 5   // 降低延遲
+        backBufferLength: 5,
+        // 重點 2：允許自簽憑證與跨來源（很重要！）
+        xhrSetup: function(xhr, url) {
+          xhr.withCredentials = false;  // 不傳 cookie
+          // 允許自簽憑證（舊版瀏覽器需要這行）
+          xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
+          // 以下這行在新版 Chrome 必須加，否則一樣會被擋
+          if (xhr.hasOwnProperty('overrideMimeType')) {
+            xhr.overrideMimeType('text/plain; charset=x-user-defined');
+          }
+        }
       });
+
       hls.loadSource(hlsUrl);
       hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => console.log("自動播放被瀏覽器阻擋，已 muted 所以沒問題"));
-      });
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari 原生支援
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+      hls.on(Hls.Events.ERROR, (event, data) => console.error(data)); // 除錯用
+    } 
+    // Safari 原生支援
+    else if (video.canPlayType('application/vnd.apple.mpegurl')) {
       video.src = hlsUrl;
       video.play();
     }
