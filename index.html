@@ -3,49 +3,69 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title></title>
+  <title>監控畫面 - 純 iframe 滿版版</title>
   <style>
-    html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:#000}
-    video{position:absolute;top:0;left:0;width:100%!important;height:100%!important;object-fit:contain}
+    /* 徹底消滅所有捲軸、邊框、留白 */
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+      /* 關鍵：讓 iframe 內容自己縮放填滿 */
+      transform-origin: 0 0;
+      /* 以下這行會自動計算縮放比例，保證畫面完整顯示又不留白 */
+      transform: scale(1);           /* 會被 JS 動態覆蓋 */
+      image-rendering: pixelated;    /* 讓放大時畫質稍微好一點 */
+    }
   </style>
 </head>
 <body>
-  <video id="video" controls autoplay muted playsinline></video>
+  <!-- 直接把你原本就能看的頁面塞進來（http 或 https 都可以） -->
+  <iframe id="stream" src="http://60.251.39.37:8088/videostreams/1/stream" allowfullscreen></iframe>
 
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
-    const video = document.getElementById('video');
-    
-    // 重點 1：改用 http（避開 mixed content + 自簽憑證問題）
-    const hlsUrl = 'http://60.251.39.37:8088/videostreams/1/stream';
-
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        lowLatencyMode: true,
-        backBufferLength: 5,
-        // 重點 2：允許自簽憑證與跨來源（很重要！）
-        xhrSetup: function(xhr, url) {
-          xhr.withCredentials = false;  // 不傳 cookie
-          // 允許自簽憑證（舊版瀏覽器需要這行）
-          xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
-          // 以下這行在新版 Chrome 必須加，否則一樣會被擋
-          if (xhr.hasOwnProperty('overrideMimeType')) {
-            xhr.overrideMimeType('text/plain; charset=x-user-defined');
-          }
+    // 讓 iframe 內容自動縮放填滿視窗（不管原本是 640x480、1280x720 都完美撐滿）
+    function resizeIframe() {
+      const iframe = document.getElementById('stream');
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      
+      // 等 iframe 內頁面真的載入完才計算（很重要）
+      if (iframeDoc && iframeDoc.body) {
+        const w = iframeDoc.body.scrollWidth;
+        const h = iframeDoc.body.scrollHeight;
+        
+        if (w && h) {
+          const scaleX = window.innerWidth / w;
+          const scaleY = window.innerHeight / h;
+          const scale = Math.min(scaleX, scaleY);   // 取較小值 → 保證整張畫面都看得到
+          
+          iframe.style.transform = `scale(${scale})`;
+          iframe.style.width = w + 'px';
+          iframe.style.height = h + 'px';
         }
-      });
-
-      hls.loadSource(hlsUrl);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
-      hls.on(Hls.Events.ERROR, (event, data) => console.error(data)); // 除錯用
-    } 
-    // Safari 原生支援
-    else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = hlsUrl;
-      video.play();
+      }
     }
+
+    // 載入完成 + 視窗變動時都重新計算
+    window.addEventListener('load', () => {
+      const iframe = document.getElementById('stream');
+      iframe.addEventListener('load', resizeIframe);
+      window.addEventListener('resize', resizeIframe);
+      
+      // 第一次強制跑一次（有些瀏覽器 load 事件會漏）
+      setTimeout(resizeIframe, 1500);
+      setTimeout(resizeIframe, 5000);   // 保險再跑一次
+    });
   </script>
 </body>
 </html>
