@@ -1,6 +1,60 @@
-<div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;"> <!-- 16:9 比例 -->
-  <iframe src="https://60.251.39.37:8088/videostreams/1/stream" 
-          style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none;" 
-          allowfullscreen>
-  </iframe>
-</div>
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>即時監控畫面</title>
+  <style>
+    /* 關鍵：完全消除捲軸、填滿整個視窗 */
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    /* 讓 video 標籤 100% 撐滿，並保持比例 */
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain;   /* 畫面完整顯示不會被裁切 */
+      /* object-fit: cover;   如果你想裁切成滿版可換這行 */
+    }
+  </style>
+</head>
+<body>
+  <!-- 直接用原生 video 標籤 + hls.js -->
+  <video id="video" controls autoplay muted playsinline></video>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script>
+    const video = document.getElementById('video');
+    const hlsUrl = 'https://60.251.39.37:8088/videostreams/1/stream';  // 你的串流
+
+    // 讓 Tableau 內也能自動播放（加了 muted）
+    video.muted = true;
+    video.playsInline = true;
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 5   // 降低延遲
+      });
+      hls.loadSource(hlsUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => console.log("自動播放被瀏覽器阻擋，已 muted 所以沒問題"));
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari 原生支援
+      video.src = hlsUrl;
+      video.play();
+    }
+  </script>
+</body>
+</html>
