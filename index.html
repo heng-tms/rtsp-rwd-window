@@ -31,41 +31,67 @@
 </head>
 <body>
   <!-- 直接把你原本就能看的頁面塞進來（http 或 https 都可以） -->
-  <iframe id="stream" src="https://60.251.39.37:8088/videostreams/1/stream" allowfullscreen></iframe>
-
+<iframe id="stream" 
+        src="https://60.251.39.37:8088/videostreams/1/stream" 
+        allowfullscreen
+        data-intrinsic-width="1920" 
+        data-intrinsic-height="1080"
+></iframe>
   <script>
-    // 讓 iframe 內容自動縮放填滿視窗（不管原本是 640x480、1280x720 都完美撐滿）
-    function resizeIframe() {
-      const iframe = document.getElementById('stream');
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-      
-      // 等 iframe 內頁面真的載入完才計算（很重要）
-      if (iframeDoc && iframeDoc.body) {
-        const w = iframeDoc.body.scrollWidth;
-        const h = iframeDoc.body.scrollHeight;
-        
-        if (w && h) {
-          const scaleX = window.innerWidth / w;
-          const scaleY = window.innerHeight / h;
-          const scale = Math.min(scaleX, scaleY);   // 取較小值 → 保證整張畫面都看得到
-          
-          iframe.style.transform = `scale(${scale})`;
-          iframe.style.width = w + 'px';
-          iframe.style.height = h + 'px';
-        }
-      }
-    }
+   // 讓 iframe 內容自動縮放填滿視窗（不管原本是 640x480、1280x720 都完美撐滿）
+function resizeIframe() {
+  const iframe = document.getElementById('stream');
 
-    // 載入完成 + 視窗變動時都重新計算
-    window.addEventListener('load', () => {
-      const iframe = document.getElementById('stream');
-      iframe.addEventListener('load', resizeIframe);
-      window.addEventListener('resize', resizeIframe);
-      
-      // 第一次強制跑一次（有些瀏覽器 load 事件會漏）
-      setTimeout(resizeIframe, 1500);
-      setTimeout(resizeIframe, 5000);   // 保險再跑一次
-    });
+  // *** 核心修正：從 data 屬性取得串流內頁的原始尺寸 ***
+  // 替換掉原本會被跨域阻擋的 iframe.contentDocument 存取
+  const w = parseInt(iframe.getAttribute('data-intrinsic-width'), 10);
+  const h = parseInt(iframe.getAttribute('data-intrinsic-height'), 10);
+
+  // 確保取得有效數值
+  if (w && h && !isNaN(w) && !isNaN(h)) {
+    // 1. 將 iframe 自身尺寸設定為內容的原始尺寸
+    iframe.style.width = w + 'px';
+    iframe.style.height = h + 'px';
+
+    // 2. 計算縮放比例
+    const scaleX = window.innerWidth / w;
+    const scaleY = window.innerHeight / h;
+    // 取較小值 → 實現「整張畫面可見」(CSS object-fit: contain 的效果)
+    const scale = Math.min(scaleX, scaleY); 
+
+    // 3. 應用縮放
+    iframe.style.transform = `scale(${scale})`;
+    
+    // ** 【選用：居中畫面】 **
+    // 如果您希望縮放後的畫面能在視窗中「置中」，還需要計算偏移量。
+    const offsetX = (window.innerWidth - (w * scale)) / 2;
+    const offsetY = (window.innerHeight - (h * scale)) / 2;
+    
+    // 調整 top 和 left 屬性來實現居中
+    iframe.style.top = `${offsetY}px`;
+    iframe.style.left = `${offsetX}px`;
+
+  } else {
+    // 如果沒有設定尺寸，至少先保持 100% 寬高
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.transform = 'scale(1)';
+  }
+}
+
+// 保持原本的監聽事件...
+window.addEventListener('load', () => {
+  const iframe = document.getElementById('stream');
+  // 由於我們無法存取 contentDocument，無法確認內頁是否真正載入完成。
+  // 可以保留這個 load 監聽，但在跨域情境下，它主要作用是確保 iframe DOM 元素存在。
+  iframe.addEventListener('load', resizeIframe);
+  window.addEventListener('resize', resizeIframe);
+  
+  // 第一次強制跑一次 + 保險再跑一次
+  resizeIframe(); // 第一次直接跑
+  setTimeout(resizeIframe, 1500); 
+  setTimeout(resizeIframe, 5000); 
+});
   </script>
 </body>
 </html>
